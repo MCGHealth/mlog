@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -16,23 +17,25 @@ var iobuffer bytes.Buffer
 
 func TestInit(t *testing.T) {
 	type testCase struct {
+		c string
 		l mlog.LogEventLevel
 		w io.Writer
 		e bool
 		m string
 	}
 	testcases := []testCase{
-		{l: mlog.UnknownLevel, w: &iobuffer, e: true, m: "log level is invalid"},
-		{l: mlog.DebugLevel, w: nil, e: true, m: "arg `w` cannot be nil"},
-		{l: mlog.DebugLevel, w: &iobuffer, e: false},
-		{l: mlog.InfoLevel, w: &iobuffer, e: false},
-		{l: mlog.WarnLevel, w: &iobuffer, e: false},
-		{l: mlog.ErrorLevel, w: &iobuffer, e: false},
-		{l: mlog.CriticalLevel, w: &iobuffer, e: false},
+		{c: "BAD_LEVEL", l: mlog.UnknownLevel, w: &iobuffer, e: true, m: "log level is invalid"},
+		{c: mlog.DEBUG, l: mlog.DebugLevel, w: nil, e: true, m: "arg `w` cannot be nil"},
+		{c: mlog.DEBUG, l: mlog.DebugLevel, w: &iobuffer, e: false},
+		{c: mlog.INFO, l: mlog.InfoLevel, w: &iobuffer, e: false},
+		{c: mlog.WARN, l: mlog.WarnLevel, w: &iobuffer, e: false},
+		{c: mlog.ERROR, l: mlog.ErrorLevel, w: &iobuffer, e: false},
+		{c: mlog.CRITICAL, l: mlog.CriticalLevel, w: &iobuffer, e: false},
 	}
 
 	for _, tc := range testcases {
 		mlog.Reset()
+		os.Setenv(mlog.MLOG_LOG_LEVEL, tc.c)
 		err := mlog.Initialize(tc.w, tc.l)
 		if tc.e {
 			assert.Errorf(t, err, tc.m)

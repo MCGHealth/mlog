@@ -4,9 +4,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
 
 	"log"
+)
+
+const (
+	MLOG_LOG_LEVEL = "MLOG_LOG_LEVEL"
+	MLOG_PREFIX    = "MLOG_PREFIX"
+	DEBUG          = "DEBUG"
+	INFO           = "INFO"
+	WARN           = "WARN"
+	ERROR          = "ERROR"
+	CRITICAL       = "CRITICAL"
+	defaultpf      = "mlog"
 )
 
 var (
@@ -26,26 +39,61 @@ func reset() {
 // Examples:
 // * use the stdout within a container:
 func Initialize(w io.Writer, level LogEventLevel) error {
-	mtx.Lock()
-	defer mtx.Unlock()
-
 	if isInit {
 		return nil
 	}
+
+	mtx.Lock()
+	defer mtx.Unlock()
 
 	if w == nil {
 		return errors.New("an `io.writer` cannot be nil")
 	}
 
-	if level == UnknownLevel {
-		return errors.New("log level is invalid")
+	loglevel, err := getLogLevel()
+	if err != nil {
+		return err
 	}
 
-	loglevel = level
-	ilog = log.New(w, "golog ", log.Ldate|log.Ltime|log.LUTC)
+	pf := getPrefix()
+	ilog = log.New(w, fmt.Sprintf("%s ", pf), log.Ldate|log.Ltime|log.LUTC)
 	Infof("internal logging set to level %s", loglevel)
+	if strings.EqualFold(defaultpf, pf) {
+		return errors.New("env var `MLOG_PREFIX` is missing")
+	}
 	isInit = true
 	return nil
+}
+
+func getPrefix() string {
+	pf := os.Getenv(MLOG_PREFIX)
+	if len(pf) == 0 {
+		pf = defaultpf
+	}
+	return pf
+}
+
+func getLogLevel() (LogEventLevel, error) {
+	lvl := os.Getenv(MLOG_LOG_LEVEL)
+
+	switch lvl {
+	case strings.TrimSpace(lvl):
+		return UnknownLevel, errors.New("env var `MLOG_LOG_LEVEL` is missing")
+	case DEBUG:
+		loglevel = DebugLevel
+	case INFO:
+		loglevel = InfoLevel
+	case WARN:
+		loglevel = WarnLevel
+	case ERROR:
+		loglevel = ErrorLevel
+	case CRITICAL:
+		loglevel = CriticalLevel
+	default:
+		return UnknownLevel, fmt.Errorf("env var `SVC_LOG_LEVEL` value `%s` is not valid", lvl)
+	}
+
+	return loglevel, nil
 }
 
 // CurrentLevel returns the current logging level.
