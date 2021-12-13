@@ -1,3 +1,3 @@
 # mlog
 
-Mlog is a simple log writer package for sidecar apps written in Go.
+Mlog is a simple log writer package for MCG sidecar apps written in Go.
