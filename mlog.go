@@ -4,9 +4,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
 
 	"log"
+)
+
+const (
+	MLOG_LOG_LEVEL = "MLOG_LOG_LEVEL"
+	MLOG_PREFIX    = "MLOG_PREFIX"
+	DEBUG          = "DEBUG"
+	INFO           = "INFO"
+	WARN           = "WARN"
+	ERROR          = "ERROR"
+	CRITICAL       = "CRITICAL"
+	defaultpf      = "mlog"
 )
 
 var (
@@ -25,27 +38,63 @@ func reset() {
 // to write out the log entries.
 // Examples:
 // * use the stdout within a container:
-func Initialize(w io.Writer, level LogEventLevel) error {
-	mtx.Lock()
-	defer mtx.Unlock()
-
+func Initialize(w io.Writer) error {
 	if isInit {
 		return nil
 	}
 
+	mtx.Lock()
+	defer mtx.Unlock()
+
 	if w == nil {
-		return errors.New("an `io.writer` cannot be nil")
+		return errors.New("arg `w` cannot be nil")
 	}
 
-	if level == UnknownLevel {
-		return errors.New("log level is invalid")
+	pf, err := getPrefix()
+	if err != nil {
+		return err
 	}
 
-	loglevel = level
-	ilog = log.New(w, "golog ", log.Ldate|log.Ltime|log.LUTC)
+	loglevel, err := getLogLevel()
+	if err != nil {
+		return err
+	}
+
+	ilog = log.New(w, fmt.Sprintf("%s ", pf), log.Ldate|log.Ltime|log.LUTC)
 	Infof("internal logging set to level %s", loglevel)
 	isInit = true
 	return nil
+}
+
+func getPrefix() (string, error) {
+	pf := os.Getenv(MLOG_PREFIX)
+	if len(strings.TrimSpace(pf)) == 0 {
+		return "", errors.New("env var `MLOG_PREFIX` is missing")
+	}
+	return pf, nil
+}
+
+func getLogLevel() (LogEventLevel, error) {
+	lvl := os.Getenv(MLOG_LOG_LEVEL)
+
+	switch {
+	case len(strings.TrimSpace(lvl)) == 0:
+		return UnknownLevel, errors.New("env var `MLOG_LOG_LEVEL` is missing")
+	case lvl == DEBUG:
+		loglevel = DebugLevel
+	case lvl == INFO:
+		loglevel = InfoLevel
+	case lvl == WARN:
+		loglevel = WarnLevel
+	case lvl == ERROR:
+		loglevel = ErrorLevel
+	case lvl == CRITICAL:
+		loglevel = CriticalLevel
+	default:
+		return UnknownLevel, fmt.Errorf("env var `SVC_LOG_LEVEL` value `%s` is not valid", lvl)
+	}
+
+	return loglevel, nil
 }
 
 // CurrentLevel returns the current logging level.
@@ -93,6 +142,9 @@ func Warn(msg string) {
 
 // Error writes out an internal error log message.
 func Error(err error, msg *string) {
+	if loglevel > ErrorLevel {
+		return
+	}
 	if msg != nil {
 		ilog.Printf("ERROR: %v - %v", err, *msg)
 	} else {
@@ -138,12 +190,15 @@ func Warnf(msg string, args ...interface{}) {
 
 // Errorf writes out a formatted internal error log message.
 func Errorf(err error, msg string, args ...interface{}) {
+	if loglevel > ErrorLevel {
+		return
+	}
 	fmsg := fmt.Sprintf(msg, args...)
-	ilog.Printf("ERROR: - %s; error: %v", fmsg, err)
+	ilog.Printf("ERROR: - %s; %v", fmsg, err)
 }
 
 // Criticalf writes out a formatted internal critical log message.
 func Criticalf(err error, msg string, args ...interface{}) {
 	fmsg := fmt.Sprintf(msg, args...)
-	ilog.Printf("CRITICAL: - %s; error: %v", fmsg, err)
+	ilog.Printf("CRITICAL: - %s; %v", fmsg, err)
 }
